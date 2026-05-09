@@ -1,12 +1,17 @@
-# 🌾 Krishi Mitra (Farmer's Friend)
-
-An offline-first, AI-powered agricultural mobile application built with Flutter. Krishi Mitra empowers farmers with hyper-local agronomic intelligence, precision farming tools, and voice-assisted decision-making.
-
 <div align="center">
-  <img src="https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white" />
-  <img src="https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white" />
-  <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
-  <img src="https://img.shields.io/badge/AI-Groq-black?style=for-the-badge" />
+  <h1>🌾 Krishi Mitra</h1>
+  <h3>Your AI-Powered Agricultural Companion</h3>
+  <br />
+  <p>
+    An offline-first mobile app built with Flutter. Krishi Mitra empowers farmers with hyper-local agronomic intelligence, precision farming tools, and voice-assisted decision-making.
+  </p>
+  <br />
+  <p>
+    <a href="https://flutter.dev/"><img src="https://img.shields.io/badge/Flutter-02569B?style=flat&logo=flutter&logoColor=white" alt="Flutter" /></a>
+    <a href="https://dart.dev/"><img src="https://img.shields.io/badge/Dart-0175C2?style=flat&logo=dart&logoColor=white" alt="Dart" /></a>
+    <a href="https://supabase.com/"><img src="https://img.shields.io/badge/Supabase-3ECF8E?style=flat&logo=supabase&logoColor=white" alt="Supabase" /></a>
+    <img src="https://img.shields.io/badge/Groq_AI-F55036?style=flat" alt="Groq" />
+  </p>
 </div>
 
 ---
