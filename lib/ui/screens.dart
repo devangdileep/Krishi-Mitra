@@ -20,6 +20,7 @@ import '../services/api_clients.dart';
 import '../services/auth_service.dart';
 import '../services/human_voice_service.dart';
 import '../theme/app_theme.dart';
+import 'services_screen.dart';
 import 'widgets/premium_widgets.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -686,7 +687,7 @@ class _HomeShellState extends State<HomeShell> {
         weather: widget.weather,
         intelligence: widget.intelligence,
         userId: user.id,
-        onOpenAccount: () => setState(() => _index = 3),
+        onOpenAccount: () => setState(() => _index = 4),
       ),
       ReportScreen(
         repository: widget.repository,
@@ -696,6 +697,7 @@ class _HomeShellState extends State<HomeShell> {
         voiceService: widget.voiceService,
         userId: user.id,
       ),
+      const ServicesScreen(),
       AlertsScreen(
         api: widget.api,
         repository: widget.repository,
@@ -764,6 +766,10 @@ class _HomeShellState extends State<HomeShell> {
               label: 'Insights',
             ),
             NavigationDestination(
+              icon: Icon(Icons.grid_view_rounded),
+              label: 'Services',
+            ),
+            NavigationDestination(
               icon: Icon(Icons.storefront_rounded),
               label: 'Market',
             ),
@@ -828,14 +834,19 @@ class _AppDrawer extends StatelessWidget {
                 onTap: () => onSelect(1),
               ),
               _DrawerTile(
+                icon: Icons.grid_view_rounded,
+                label: 'Services',
+                onTap: () => onSelect(2),
+              ),
+              _DrawerTile(
                 icon: Icons.storefront_rounded,
                 label: 'Market',
-                onTap: () => onSelect(2),
+                onTap: () => onSelect(3),
               ),
               _DrawerTile(
                 icon: Icons.manage_accounts_rounded,
                 label: 'Account',
-                onTap: () => onSelect(3),
+                onTap: () => onSelect(4),
               ),
               const SizedBox(height: 20),
               OutlinedButton.icon(
