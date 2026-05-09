@@ -1,0 +1,50 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+def repoAndroidPath = rootProject.projectDir.toPath().toAbsolutePath().normalize()
+
+rootProject.buildDir = "../build"
+subprojects { subproject ->
+    def modulePath = subproject.projectDir.toPath().toAbsolutePath().normalize()
+    if (modulePath.startsWith(repoAndroidPath)) {
+        subproject.buildDir = "${rootProject.buildDir}/${subproject.name}"
+    } else {
+        // Flutter plugins live in the Pub cache, often on C: while this repo is on E:.
+        // Android Studio unit-test model generation cannot relativize paths across drives.
+        subproject.buildDir = new File(subproject.projectDir, "build")
+    }
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+subprojects {
+    tasks.withType(JavaCompile).configureEach { task ->
+        if (!task.options.compilerArgs.contains("-Xlint:-options")) {
+            task.options.compilerArgs.add("-Xlint:-options")
+        }
+    }
+}
+
+subprojects {
+    def setSdk = { proj ->
+        if (proj.hasProperty('android')) {
+            proj.android {
+                compileSdk = 36
+            }
+        }
+    }
+    if (project.state.executed) {
+        setSdk(project)
+    } else {
+        project.afterEvaluate { setSdk(it) }
+    }
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}

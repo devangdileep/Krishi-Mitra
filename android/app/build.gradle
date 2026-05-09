@@ -1,0 +1,79 @@
+plugins {
+    id "com.android.application"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def incomingDartDefines = project.findProperty("dart-defines")?.toString()
+if (incomingDartDefines == null || incomingDartDefines.trim().isEmpty()) {
+    def envFile = rootProject.file("../.env")
+    if (envFile.exists()) {
+        def envValues = new Properties()
+        envFile.eachLine { line ->
+            def trimmed = line.trim()
+            if (!trimmed || trimmed.startsWith("#") || !trimmed.contains("=")) {
+                return
+            }
+            def parts = trimmed.split("=", 2)
+            envValues.setProperty(parts[0].trim(), parts[1].trim().replaceAll(/^['"]|['"]$/, ""))
+        }
+
+        def releaseRequested = gradle.startParameter.taskNames.any {
+            it.toLowerCase().contains("release")
+        }
+        def directSecretNames = ["GROQ_API_KEY", "ELEVENLABS_API_KEY"] as Set
+        def defineNames = [
+            "SUPABASE_URL",
+            "SUPABASE_API_KEY",
+            "GROQ_API_KEY",
+            "GROQ_PROXY_ENDPOINT",
+            "VOICE_TTS_ENDPOINT",
+            "ELEVENLABS_API_KEY",
+            "ELEVENLABS_VOICE_ID",
+            "ELEVENLABS_MODEL_ID",
+            "ELEVENLABS_FALLBACK_MODEL_ID",
+        ]
+        def encodedDefines = defineNames.collect { name ->
+            if (releaseRequested && directSecretNames.contains(name)) {
+                return null
+            }
+            def value = System.getenv(name) ?: envValues.getProperty(name)
+            if (value == null || value.trim().isEmpty()) {
+                return null
+            }
+            return java.util.Base64.encoder.encodeToString("$name=$value".getBytes("UTF-8"))
+        }.findAll { it != null }
+
+        if (!encodedDefines.isEmpty()) {
+            project.ext.set("dart-defines", encodedDefines.join(","))
+        }
+    }
+}
+
+android {
+    namespace = "com.krishi.krishi_mitra"
+    compileSdk = 36
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        applicationId = "com.krishi.krishi_mitra"
+        minSdk = flutter.minSdkVersion
+        targetSdk = 36
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
