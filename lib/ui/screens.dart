@@ -22,6 +22,7 @@ import '../services/human_voice_service.dart';
 import '../theme/app_theme.dart';
 import 'services_screen.dart';
 import 'widgets/premium_widgets.dart';
+import 'widgets/satellite_map.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -6152,7 +6153,11 @@ class _ReportScreenState extends State<ReportScreen> {
                     const LinearProgressIndicator()
                   else
                     _ReportBody(report: _report!),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
+                  if (_selected != null) ...[
+                    SatelliteHealthMap(farm: _selected!),
+                    const SizedBox(height: 16),
+                  ],
                   Row(
                     children: [
                       Expanded(
