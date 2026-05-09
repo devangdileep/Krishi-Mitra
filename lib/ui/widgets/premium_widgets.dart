@@ -247,7 +247,7 @@ class FrostedNavigationBar extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final dark = colors.brightness == Brightness.dark;
     final navigation = NavigationBar(
-      height: 64,
+      height: 68,
       elevation: 0,
       backgroundColor: Colors.transparent,
       indicatorColor: colors.primaryContainer,
@@ -263,7 +263,7 @@ class FrostedNavigationBar extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           child: DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
@@ -281,18 +281,27 @@ class FrostedNavigationBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(18),
               child: Theme(
                 data: Theme.of(context).copyWith(
-                  navigationBarTheme: Theme.of(context)
-                      .navigationBarTheme
-                      .copyWith(labelTextStyle:
-                          WidgetStateProperty.resolveWith((states) {
-                    final selected = states.contains(WidgetState.selected);
-                    return TextStyle(
-                      color:
-                          selected ? colors.primary : colors.onSurfaceVariant,
-                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                      fontSize: 12,
-                    );
-                  })),
+                  navigationBarTheme:
+                      Theme.of(context).navigationBarTheme.copyWith(
+                    iconTheme: WidgetStateProperty.resolveWith((states) {
+                      final selected = states.contains(WidgetState.selected);
+                      return IconThemeData(
+                        size: selected ? 24 : 22,
+                        color:
+                            selected ? colors.primary : colors.onSurfaceVariant,
+                      );
+                    }),
+                    labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                      final selected = states.contains(WidgetState.selected);
+                      return TextStyle(
+                        color:
+                            selected ? colors.primary : colors.onSurfaceVariant,
+                        fontWeight:
+                            selected ? FontWeight.w800 : FontWeight.w600,
+                        fontSize: 11,
+                      );
+                    }),
+                  ),
                 ),
                 child: navigation,
               ),

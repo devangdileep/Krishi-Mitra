@@ -677,6 +677,66 @@ class MandiPriceRecord {
       };
 }
 
+class MarketplaceListing {
+  const MarketplaceListing({
+    required this.id,
+    required this.userId,
+    required this.listingType,
+    required this.title,
+    this.description,
+    this.cropType,
+    this.quantity,
+    this.price,
+    this.status = 'active',
+    this.ownerName,
+    this.createdAt,
+  });
+
+  final String id;
+  final int userId;
+  final String listingType;
+  final String title;
+  final String? description;
+  final String? cropType;
+  final String? quantity;
+  final double? price;
+  final String status;
+  final String? ownerName;
+  final DateTime? createdAt;
+
+  bool get isLabor => listingType.toLowerCase().contains('labor');
+
+  factory MarketplaceListing.fromJson(Map<String, dynamic> json) {
+    final owner = json['users'];
+    return MarketplaceListing(
+      id: json['id']?.toString() ?? '',
+      userId: (json['user_id'] as num?)?.toInt() ?? 0,
+      listingType: json['listing_type']?.toString() ?? 'machinery',
+      title: json['title']?.toString() ?? 'Untitled listing',
+      description: json['description']?.toString(),
+      cropType: json['crop_type']?.toString(),
+      quantity: json['quantity']?.toString(),
+      price: json['price'] == null ? null : _jsonDouble(json['price']),
+      status: json['status']?.toString() ?? 'active',
+      ownerName: owner is Map ? owner['name']?.toString() : null,
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'user_id': userId,
+        'listing_type': listingType,
+        'title': title,
+        if (description != null) 'description': description,
+        if (cropType != null) 'crop_type': cropType,
+        if (quantity != null) 'quantity': quantity,
+        if (price != null) 'price': price,
+        'status': status,
+        if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
+      };
+}
+
 class ComprehensiveReport {
   const ComprehensiveReport({
     required this.cropAnalysis,

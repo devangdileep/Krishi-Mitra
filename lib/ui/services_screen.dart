@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
+import '../services/api_clients.dart';
 import '../theme/app_theme.dart';
 import 'marketplace_screen.dart';
 import 'subsidies_screen.dart';
-import 'widgets/premium_widgets.dart';
 
 class ServicesScreen extends StatelessWidget {
-  const ServicesScreen({super.key});
+  const ServicesScreen({
+    super.key,
+    required this.api,
+    required this.repository,
+    required this.userId,
+  });
+
+  final SupabaseRestClient api;
+  final FarmlandRepository repository;
+  final int userId;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -18,7 +27,8 @@ class ServicesScreen extends StatelessWidget {
         elevation: 0,
         title: Text(
           'Agri Services',
-          style: TextStyle(color: colors.onSurface, fontWeight: FontWeight.bold),
+          style:
+              TextStyle(color: colors.onSurface, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
       ),
@@ -32,13 +42,30 @@ class ServicesScreen extends StatelessWidget {
             title: 'Govt Subsidies',
             icon: Icons.account_balance_rounded,
             color: Colors.blueAccent,
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SubsidiesScreen())),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SubsidiesScreen(
+                  repository: repository,
+                  userId: userId,
+                ),
+              ),
+            ),
           ),
           _ServiceCard(
             title: 'Peer Market',
             icon: Icons.handshake_rounded,
             color: Colors.orangeAccent,
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MarketplaceScreen())),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MarketplaceScreen(
+                  api: api,
+                  repository: repository,
+                  userId: userId,
+                ),
+              ),
+            ),
           ),
           _ServiceCard(
             title: 'Disease Scanner',
@@ -92,7 +119,7 @@ class _ServiceCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
+                color: color.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, size: 42, color: color),

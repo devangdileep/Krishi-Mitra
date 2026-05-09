@@ -698,7 +698,11 @@ class _HomeShellState extends State<HomeShell> {
         voiceService: widget.voiceService,
         userId: user.id,
       ),
-      const ServicesScreen(),
+      ServicesScreen(
+        api: widget.api,
+        repository: widget.repository,
+        userId: user.id,
+      ),
       AlertsScreen(
         api: widget.api,
         repository: widget.repository,
@@ -753,7 +757,7 @@ class _HomeShellState extends State<HomeShell> {
             ),
           ),
         ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
         bottomNavigationBar: FrostedNavigationBar(
           selectedIndex: _index,
           onDestinationSelected: (index) => setState(() => _index = index),

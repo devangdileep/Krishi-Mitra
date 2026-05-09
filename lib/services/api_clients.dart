@@ -153,6 +153,57 @@ class SupabaseRestClient {
     return _list(response, PestAlert.fromJson);
   }
 
+  Future<List<MarketplaceListing>> getMarketplaceListings({
+    String? listingType,
+    int limit = 50,
+  }) async {
+    _ensureConfigured();
+    final query = <String, String>{
+      'select': '*,users(name)',
+      'status': 'eq.active',
+      'order': 'created_at.desc',
+      'limit': '$limit',
+    };
+    if (listingType != null && listingType.trim().isNotEmpty) {
+      query['listing_type'] = 'eq.${listingType.trim()}';
+    }
+    final response = await _client.get(
+      _uri('/rest/v1/marketplace_listings', query),
+      headers: _headers,
+    );
+    return _list(response, MarketplaceListing.fromJson);
+  }
+
+  Future<MarketplaceListing> createMarketplaceListing({
+    required int userId,
+    required String listingType,
+    required String title,
+    String? description,
+    String? cropType,
+    String? quantity,
+    double? price,
+  }) async {
+    _ensureConfigured();
+    final response = await _client.post(
+      _uri('/rest/v1/marketplace_listings', {'select': '*,users(name)'}),
+      headers: {..._headers, 'Prefer': 'return=representation'},
+      body: jsonEncode({
+        'user_id': userId,
+        'listing_type': listingType,
+        'title': title,
+        if (description != null && description.trim().isNotEmpty)
+          'description': description.trim(),
+        if (cropType != null && cropType.trim().isNotEmpty)
+          'crop_type': cropType.trim(),
+        if (quantity != null && quantity.trim().isNotEmpty)
+          'quantity': quantity.trim(),
+        if (price != null && price > 0) 'price': price,
+        'status': 'active',
+      }),
+    );
+    return _single(response, MarketplaceListing.fromJson);
+  }
+
   Future<UserProfile?> _findUserByPhone(String phoneNumber) async {
     final response = await _client.get(
       _uri('/rest/v1/users', {
@@ -343,11 +394,4 @@ class FarmlandRepository {
 
 extension _StringBlank on String {
   bool get isBlank => trim().isEmpty;
-}
-
-extension _StringTail on String {
-  String takeLast(int count) {
-    if (length <= count) return this;
-    return substring(length - count);
-  }
 }
