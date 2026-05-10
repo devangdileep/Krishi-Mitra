@@ -1,10 +1,31 @@
-# Krishi Mitra
+<div align="center">
+  <img src="assets/icon.png" alt="Krishi Mitra logo" width="132" />
+  <h1>Krishi Mitra</h1>
+  <p><strong>Offline-first AI farming assistant for mapping, crop planning, mandi intelligence, weather risk, and voice guidance.</strong></p>
 
-[![Flutter](https://img.shields.io/badge/Flutter-02569B?style=flat&logo=flutter&logoColor=white)](https://flutter.dev/)
-[![Dart](https://img.shields.io/badge/Dart-0175C2?style=flat&logo=dart&logoColor=white)](https://dart.dev/)
-[![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat&logo=supabase&logoColor=white)](https://supabase.com/)
-[![Groq](https://img.shields.io/badge/Groq-AI-F55036?style=flat)](https://groq.com/)
-[![MapLibre](https://img.shields.io/badge/MapLibre-Maps-396CB2?style=flat)](https://maplibre.org/)
+  <p>
+    <a href="https://flutter.dev/"><img src="https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white" alt="Flutter" /></a>
+    <a href="https://dart.dev/"><img src="https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white" alt="Dart" /></a>
+    <a href="https://supabase.com/"><img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" /></a>
+    <a href="https://groq.com/"><img src="https://img.shields.io/badge/Groq-AI-F55036?style=for-the-badge" alt="Groq AI" /></a>
+    <a href="https://maplibre.org/"><img src="https://img.shields.io/badge/MapLibre-Maps-396CB2?style=for-the-badge" alt="MapLibre" /></a>
+  </p>
+
+  <p>
+    <img src="https://img.shields.io/badge/Sarvam-Bulbul_v3-5B5FC7?style=flat-square" alt="Sarvam Bulbul v3" />
+    <img src="https://img.shields.io/badge/Deepgram-Aura-13EF93?style=flat-square" alt="Deepgram Aura" />
+    <img src="https://img.shields.io/badge/Open--Meteo-Weather-4A90E2?style=flat-square" alt="Open-Meteo" />
+    <img src="https://img.shields.io/badge/data.gov.in-AGMARKNET-2E7D32?style=flat-square" alt="data.gov.in AGMARKNET" />
+    <img src="https://img.shields.io/badge/Gradle-9.4.1-02303A?style=flat-square&logo=gradle&logoColor=white" alt="Gradle 9.4.1" />
+  </p>
+
+  <p>
+    <a href="#highlights">Highlights</a> |
+    <a href="#ai-and-voice-system">AI and Voice</a> |
+    <a href="#environment-variables">Setup</a> |
+    <a href="#architecture">Architecture</a>
+  </p>
+</div>
 
 Krishi Mitra is an offline-first AI farming platform for field mapping, crop
 planning, mandi-aware market decisions, weather risk assessment, and
