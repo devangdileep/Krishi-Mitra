@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,7 +10,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../config/app_config.dart';
 
-enum VoiceProvider { cartesia, secureProxy, deviceFallback }
+enum VoiceProvider { deepgram, deviceFallback }
 
 class VoicePlaybackResult {
   const VoicePlaybackResult({
@@ -41,9 +42,8 @@ class HumanVoiceService {
   bool get isPlaying => _speakGeneration > 0;
   bool get cloudVoiceReady => AppConfig.isHumanVoiceConfigured;
   String get voiceStatusLabel {
-    if (AppConfig.isVoiceProxyConfigured) return 'Secure neural voice ready';
-    if (AppConfig.isCartesiaConfigured) {
-      return 'Cartesia neural voice ready';
+    if (AppConfig.isDeepgramConfigured) {
+      return 'Deepgram Aura voice ready';
     }
     return 'Offline device voice';
   }
@@ -68,26 +68,11 @@ class HumanVoiceService {
     // cancellation between chunks.
     final generation = _speakGeneration;
 
-    if (AppConfig.isVoiceProxyConfigured) {
-      try {
-        await _speakCloud(prepared, languageCode, _audioFromProxy, generation);
-        return const VoicePlaybackResult(provider: VoiceProvider.secureProxy);
-      } catch (error) {
-        if (_speakGeneration != generation) {
-          return const VoicePlaybackResult(
-            provider: VoiceProvider.deviceFallback,
-            message: 'Playback cancelled.',
-          );
-        }
-        return _fallback(prepared, languageCode, error, generation);
-      }
-    }
-
-    if (AppConfig.isCartesiaConfigured) {
+    if (AppConfig.isDeepgramConfigured) {
       try {
         await _speakCloud(
-            prepared, languageCode, _audioFromCartesia, generation);
-        return const VoicePlaybackResult(provider: VoiceProvider.cartesia);
+            prepared, languageCode, _audioFromDeepgram, generation);
+        return const VoicePlaybackResult(provider: VoiceProvider.deepgram);
       } catch (error) {
         if (_speakGeneration != generation) {
           return const VoicePlaybackResult(
@@ -110,6 +95,17 @@ class HumanVoiceService {
     await _fallbackTts.stop();
   }
 
+  Future<void> speakLocalCue(String text, String languageCode) async {
+    final prepared = _prepareForSpeech(text);
+    if (prepared.isEmpty) return;
+    await stop();
+    try {
+      await _speakDevice(prepared, languageCode);
+    } catch (_) {
+      // A cue is only a latency helper; the main answer still updates on screen.
+    }
+  }
+
   Future<VoicePlaybackResult> _fallback(
     String text,
     String languageCode,
@@ -122,7 +118,15 @@ class HumanVoiceService {
         message: 'Playback cancelled.',
       );
     }
-    await _speakDevice(text, languageCode);
+    try {
+      await _speakDevice(text, languageCode);
+    } catch (deviceError) {
+      return VoicePlaybackResult(
+        provider: VoiceProvider.deviceFallback,
+        message:
+            'Voice playback failed. Cloud voice error: $error. Device voice error: $deviceError',
+      );
+    }
     return VoicePlaybackResult(
       provider: VoiceProvider.deviceFallback,
       message: 'Cloud voice failed, used offline voice. $error',
@@ -136,74 +140,42 @@ class HumanVoiceService {
     int generation,
   ) async {
     await _player.setReleaseMode(ReleaseMode.stop);
-    for (final chunk in _speechChunks(text, maxChars: 1800)) {
+    for (final chunk in _speechChunks(text, maxChars: 320)) {
       // Bail out if a newer stop() or speak() happened while we were fetching.
       if (_speakGeneration != generation) return;
       final file = await resolveAudio(chunk, languageCode);
       if (_speakGeneration != generation) return;
+      final completed = _player.onPlayerComplete.first.timeout(
+        const Duration(seconds: 45),
+        onTimeout: () {
+          throw TimeoutException('Cloud audio playback timed out.');
+        },
+      );
       await _player.play(DeviceFileSource(file.path));
-      await _player.onPlayerComplete.first;
+      await completed;
       if (_speakGeneration != generation) return;
     }
   }
 
-  Future<File> _audioFromProxy(String text, String languageCode) async {
+  Future<File> _audioFromDeepgram(String text, String languageCode) async {
+    final model = AppConfig.deepgramTtsModel;
     return _cachedAudioFile(
-      namespace: 'proxy',
+      namespace: 'deepgram',
       text: text,
-      languageCode: languageCode,
-      fetch: () => _postAudio(
-        Uri.parse(AppConfig.voiceTtsEndpoint),
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': AppConfig.supabaseApiKey,
-          'Authorization': 'Bearer ${AppConfig.supabaseApiKey}',
-        },
-        body: {
-          'provider': 'cartesia',
-          'text': text,
-          'language_code': _shortLanguageCode(languageCode),
-          'voice_id': AppConfig.cartesiaVoiceId,
-          'model_id': AppConfig.cartesiaModelId,
-        },
-      ),
-    );
-  }
-
-  Future<File> _audioFromCartesia(String text, String languageCode) async {
-    final language = _cartesiaLanguageCode(languageCode);
-    return _cachedAudioFile(
-      namespace: 'cartesia',
-      text: text,
-      languageCode: language,
-      modelId: AppConfig.cartesiaModelId,
+      languageCode: _shortLanguageCode(languageCode),
+      modelId: model,
       extension: 'mp3',
       fetch: () => _postAudio(
-        Uri.parse('https://api.cartesia.ai/tts/bytes'),
+        Uri.https('api.deepgram.com', '/v1/speak', {
+          'model': model,
+        }),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${AppConfig.cartesiaApiKey}',
-          'Cartesia-Version': AppConfig.cartesiaVersion,
+          'Accept': 'audio/mpeg',
+          'Authorization': 'Token ${AppConfig.deepgramApiKey}',
         },
         body: {
-          'model_id': AppConfig.cartesiaModelId,
-          'transcript': _naturalizeForIndianFarmers(text, languageCode),
-          'voice': {
-            'mode': 'id',
-            'id': AppConfig.cartesiaVoiceId,
-          },
-          'output_format': {
-            'container': 'mp3',
-            'sample_rate': 44100,
-            'bit_rate': 128000,
-          },
-          'language': language,
-          'save': false,
-          'generation_config': {
-            'volume': 1,
-            'speed': 1,
-            'emotion': 'positivity:low',
-          },
+          'text': _naturalizeForIndianFarmers(text, languageCode),
         },
       ),
     );
@@ -243,8 +215,8 @@ class HumanVoiceService {
     final cacheKey = sha256
         .convert(
           utf8.encode(
-            '$namespace|$languageCode|${AppConfig.cartesiaVoiceId}|'
-            '${modelId ?? AppConfig.cartesiaModelId}|$text',
+            '$namespace|$languageCode|${AppConfig.deepgramTtsModel}|'
+            '${modelId ?? AppConfig.deepgramTtsModel}|$text',
           ),
         )
         .toString();
@@ -278,55 +250,6 @@ class HumanVoiceService {
 
   String _shortLanguageCode(String languageCode) =>
       languageCode.split('-').first.toLowerCase();
-
-  String _cartesiaLanguageCode(String languageCode) {
-    final short = _shortLanguageCode(languageCode);
-    const supported = {
-      'en',
-      'fr',
-      'de',
-      'es',
-      'pt',
-      'zh',
-      'ja',
-      'hi',
-      'it',
-      'ko',
-      'nl',
-      'pl',
-      'ru',
-      'sv',
-      'tr',
-      'tl',
-      'bg',
-      'ro',
-      'ar',
-      'cs',
-      'el',
-      'fi',
-      'hr',
-      'ms',
-      'sk',
-      'da',
-      'ta',
-      'uk',
-      'hu',
-      'no',
-      'vi',
-      'bn',
-      'th',
-      'he',
-      'ka',
-      'id',
-      'te',
-      'gu',
-      'kn',
-      'ml',
-      'mr',
-      'pa',
-    };
-    return supported.contains(short) ? short : 'en';
-  }
 
   String _naturalizeForIndianFarmers(String text, String languageCode) {
     if (!languageCode.startsWith('en')) return text;

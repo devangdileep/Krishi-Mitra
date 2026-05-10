@@ -8305,6 +8305,7 @@ class _VoiceAssistantSheetState extends State<VoiceAssistantSheet> {
   String _text = 'Tap the mic and ask your farm question';
   bool _listening = false;
   bool _speaking = false;
+  bool _processingSpeech = false;
 
   @override
   void initState() {
@@ -8328,28 +8329,103 @@ class _VoiceAssistantSheetState extends State<VoiceAssistantSheet> {
       setState(() => _listening = false);
       return;
     }
-    final available = await _speech.initialize();
-    if (!available) return;
+    late final bool available;
+    try {
+      available = await _speech.initialize(
+        onError: (error) {
+          if (!mounted) return;
+          setState(() {
+            _listening = false;
+            _processingSpeech = false;
+            _text = _friendlySpeechError(error.errorMsg);
+          });
+        },
+        onStatus: (status) {
+          if (!mounted) return;
+          if (status == 'done' || status == 'notListening') {
+            setState(() => _listening = false);
+          }
+        },
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _listening = false;
+        _text = 'Voice input could not start. Check microphone permission.';
+      });
+      return;
+    }
+    if (!available) {
+      setState(() {
+        _listening = false;
+        _text =
+            'Speech recognition is not available on this device. Install or enable Google speech services, then try again.';
+      });
+      return;
+    }
     setState(() {
       _listening = true;
+      _processingSpeech = false;
       _text = 'Listening...';
     });
     await _speech.listen(
       localeId: state.selectedLanguage,
+      listenFor: const Duration(seconds: 30),
+      pauseFor: const Duration(seconds: 4),
+      partialResults: true,
+      cancelOnError: true,
+      listenMode: ListenMode.dictation,
       onResult: (result) async {
+        final words = result.recognizedWords.trim();
         if (!result.finalResult) {
-          setState(() => _text = result.recognizedWords);
+          setState(() => _text = words.isEmpty ? 'Listening...' : words);
           return;
         }
+        if (_processingSpeech) return;
+        if (words.isEmpty) {
+          setState(() {
+            _listening = false;
+            _text =
+                'I could not hear anything clearly. Try again near the phone mic.';
+          });
+          return;
+        }
+        _processingSpeech = true;
+        final thinkingPrompt =
+            SupportedLanguages.byCode(state.selectedLanguage).thinkingPrompt;
+        if (mounted) {
+          setState(() {
+            _listening = false;
+            _text = thinkingPrompt;
+          });
+        }
+        unawaited(
+          widget.voiceService
+              .speakLocalCue(thinkingPrompt, state.selectedLanguage)
+              .catchError((_) {}),
+        );
         final farms = widget.repository.cached(widget.userId);
         final farmContext = farms
             .map((farm) =>
                 '${farm.name}: ${farm.crops.map((e) => e.name).join(", ")}; soil ${farm.soilType}; boundary ${farm.boundaryPoints.length} points')
             .join('\n');
-        final answer = await widget.decisionEngine.advice(
-          'Farmer said: "${result.recognizedWords}". Saved farms:\n$farmContext',
-          state.selectedLanguage,
-        );
+        late final String answer;
+        try {
+          answer = await widget.decisionEngine.advice(
+            'Farmer said: "$words". Saved farms:\n$farmContext',
+            state.selectedLanguage,
+          );
+        } catch (error) {
+          if (!mounted) return;
+          setState(() {
+            _listening = false;
+            _speaking = false;
+            _processingSpeech = false;
+            _text =
+                'AI answer failed. Check internet and Groq key, then try again.';
+          });
+          return;
+        }
         if (mounted) {
           setState(() {
             _listening = false;
@@ -8357,19 +8433,30 @@ class _VoiceAssistantSheetState extends State<VoiceAssistantSheet> {
             _text = answer;
           });
         }
-        late final VoicePlaybackResult voiceResult;
+        VoicePlaybackResult? voiceResult;
+        Object? playbackError;
         try {
           voiceResult = await widget.voiceService.speak(
             answer,
             state.selectedLanguage,
             contextLabel: 'Krishi Mitra answer',
           );
+        } catch (error) {
+          playbackError = error;
         } finally {
-          if (mounted) setState(() => _speaking = false);
+          if (mounted) {
+            setState(() {
+              _speaking = false;
+              _processingSpeech = false;
+            });
+          }
         }
         if (mounted) {
           setState(() => _text = answer);
-          final message = voiceResult.message;
+          final message = voiceResult?.message ??
+              (playbackError == null
+                  ? null
+                  : 'Voice playback failed. $playbackError');
           if (message != null) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(message)),
@@ -8378,6 +8465,26 @@ class _VoiceAssistantSheetState extends State<VoiceAssistantSheet> {
         }
       },
     );
+  }
+
+  String _friendlySpeechError(String errorMsg) {
+    final normalized = errorMsg.toLowerCase();
+    if (normalized.contains('permission') || normalized.contains('denied')) {
+      return 'Microphone permission is blocked. Allow microphone access and try again.';
+    }
+    if (normalized.contains('no_match') || normalized.contains('no match')) {
+      return 'I could not understand that. Please speak closer to the mic.';
+    }
+    if (normalized.contains('network')) {
+      return 'Speech recognition needs network on this device. Check internet and try again.';
+    }
+    if (normalized.contains('not_available') ||
+        normalized.contains('not available') ||
+        normalized.contains('not_supported') ||
+        normalized.contains('not supported')) {
+      return 'Speech recognition is not available. Enable Google speech services on this device.';
+    }
+    return 'Voice input stopped: $errorMsg';
   }
 
   @override

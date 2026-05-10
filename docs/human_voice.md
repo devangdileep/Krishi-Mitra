@@ -1,63 +1,31 @@
 # Human Voice Setup
 
-Krishi Mitra now supports a cloud neural voice path with an offline device TTS
-fallback.
-
-## Recommended Production Setup
-
-Put the external TTS secret on a backend or Supabase Edge Function and pass only
-the endpoint to the app:
-
-```powershell
-E:\flutter\bin\flutter.bat run `
-  --dart-define=VOICE_TTS_ENDPOINT=https://YOUR_PROJECT.supabase.co/functions/v1/human-voice
-```
-
-The endpoint should accept JSON:
-
-```json
-{
-  "text": "Advice to read aloud",
-  "language_code": "hi",
-  "voice_id": "JBFqnCBsd6RMkjVDRZzb",
-  "model_id": "eleven_multilingual_v2"
-}
-```
-
-and return `audio/mpeg` bytes.
+Krishi Mitra uses Deepgram Aura for low-latency neural text-to-speech and falls
+back to the device TTS engine when Deepgram is not configured or a network
+request fails.
 
 ## Direct Development Setup
 
-For local testing, the app can call ElevenLabs directly:
+For local testing, add these values to `.env` or pass them with
+`--dart-define`:
 
 ```powershell
 E:\flutter\bin\flutter.bat run `
-  --dart-define=ELEVENLABS_API_KEY=YOUR_KEY `
-  --dart-define=ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb `
-  --dart-define=ELEVENLABS_MODEL_ID=eleven_v3 `
-  --dart-define=ELEVENLABS_FALLBACK_MODEL_ID=eleven_multilingual_v2
+  --dart-define=DEEPGRAM_API_KEY=YOUR_KEY `
+  --dart-define=DEEPGRAM_TTS_MODEL=aura-2-thalia-en
 ```
 
-Do not ship a production APK with `ELEVENLABS_API_KEY` compiled into it. Mobile
-app binaries can be inspected, so production voice generation should go through
-the secure proxy path.
+The app posts to `https://api.deepgram.com/v1/speak` and expects `audio/mpeg`
+bytes. `aura-2-thalia-en` is the default conversational Aura 2 voice.
 
-## Indian Voice Selection
+## Production Guidance
 
-The model controls naturalness. The voice ID controls accent. The app now uses
-`eleven_v3` first and falls back to `eleven_multilingual_v2`, but you still need
-an Indian-accent voice ID for English responses to sound Indian.
+Do not ship a production APK with `DEEPGRAM_API_KEY` compiled into it. Mobile app
+binaries can be inspected. For production, proxy TTS through a backend or
+Supabase Edge Function and keep the Deepgram key server-side.
 
-In ElevenLabs, create/restrict a key with:
+## Latency Strategy
 
-- Text to Speech: Access
-- Voices: Read access, only while selecting a voice
-
-Then search the Voice Library for an Indian English voice and copy its voice ID
-into `.env`:
-
-```text
-ELEVENLABS_VOICE_ID=your_indian_voice_id
-```
-
-After the voice ID is selected, you can remove Voices read permission again.
+The assistant speaks a short local cue while the AI answer is being generated,
+then plays the Deepgram response in short chunks. This keeps the interaction
+responsive even when the answer takes a moment to prepare.

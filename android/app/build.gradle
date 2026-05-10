@@ -20,17 +20,16 @@ if (incomingDartDefines == null || incomingDartDefines.trim().isEmpty()) {
         def releaseRequested = gradle.startParameter.taskNames.any {
             it.toLowerCase().contains("release")
         }
-        def directSecretNames = ["GROQ_API_KEY", "ELEVENLABS_API_KEY"] as Set
+        def directSecretNames = ["GROQ_API_KEY", "DEEPGRAM_API_KEY"] as Set
         def defineNames = [
             "SUPABASE_URL",
             "SUPABASE_API_KEY",
             "GROQ_API_KEY",
             "GROQ_PROXY_ENDPOINT",
-            "VOICE_TTS_ENDPOINT",
-            "ELEVENLABS_API_KEY",
-            "ELEVENLABS_VOICE_ID",
-            "ELEVENLABS_MODEL_ID",
-            "ELEVENLABS_FALLBACK_MODEL_ID",
+            "DEEPGRAM_API_KEY",
+            "DEEPGRAM_TTS_MODEL",
+            "MAPTILER_KEY",
+            "DATA_GOV_API_KEY",
         ]
         def encodedDefines = defineNames.collect { name ->
             if (releaseRequested && directSecretNames.contains(name)) {

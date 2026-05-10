@@ -21,11 +21,6 @@ class AppConfig {
     defaultValue: '',
   );
 
-  static const _voiceTtsEndpointDefine = String.fromEnvironment(
-    'VOICE_TTS_ENDPOINT',
-    defaultValue: '',
-  );
-
   static const _mapTilerKeyDefine = String.fromEnvironment(
     'MAPTILER_KEY',
     defaultValue: '',
@@ -36,24 +31,14 @@ class AppConfig {
     defaultValue: 'PASTE_DATA_GOV_API_KEY',
   );
 
-  static const _cartesiaApiKeyDefine = String.fromEnvironment(
-    'CARTESIA_API_KEY',
-    defaultValue: 'PASTE_CARTESIA_API_KEY',
+  static const _deepgramApiKeyDefine = String.fromEnvironment(
+    'DEEPGRAM_API_KEY',
+    defaultValue: 'PASTE_DEEPGRAM_API_KEY',
   );
 
-  static const _cartesiaVoiceIdDefine = String.fromEnvironment(
-    'CARTESIA_VOICE_ID',
-    defaultValue: '1259b7e3-cb8a-43df-9446-30971a46b8b0',
-  );
-
-  static const _cartesiaModelIdDefine = String.fromEnvironment(
-    'CARTESIA_MODEL_ID',
-    defaultValue: 'sonic-3',
-  );
-
-  static const _cartesiaVersionDefine = String.fromEnvironment(
-    'CARTESIA_VERSION',
-    defaultValue: '2026-03-01',
+  static const _deepgramTtsModelDefine = String.fromEnvironment(
+    'DEEPGRAM_TTS_MODEL',
+    defaultValue: 'aura-2-thalia-en',
   );
 
   static String get supabaseUrl =>
@@ -68,26 +53,17 @@ class AppConfig {
   static String get groqProxyEndpoint =>
       _configuredValue('GROQ_PROXY_ENDPOINT', _groqProxyEndpointDefine);
 
-  static String get voiceTtsEndpoint =>
-      _configuredValue('VOICE_TTS_ENDPOINT', _voiceTtsEndpointDefine);
-
   static String get mapTilerKey =>
       _configuredValue('MAPTILER_KEY', _mapTilerKeyDefine);
 
   static String get dataGovApiKey =>
       _configuredValue('DATA_GOV_API_KEY', _dataGovApiKeyDefine);
 
-  static String get cartesiaApiKey =>
-      _configuredValue('CARTESIA_API_KEY', _cartesiaApiKeyDefine);
+  static String get deepgramApiKey =>
+      _configuredValue('DEEPGRAM_API_KEY', _deepgramApiKeyDefine);
 
-  static String get cartesiaVoiceId =>
-      _configuredValue('CARTESIA_VOICE_ID', _cartesiaVoiceIdDefine);
-
-  static String get cartesiaModelId =>
-      _configuredValue('CARTESIA_MODEL_ID', _cartesiaModelIdDefine);
-
-  static String get cartesiaVersion =>
-      _configuredValue('CARTESIA_VERSION', _cartesiaVersionDefine);
+  static String get deepgramTtsModel =>
+      _configuredValue('DEEPGRAM_TTS_MODEL', _deepgramTtsModelDefine);
 
   static bool get isSupabaseConfigured =>
       supabaseUrl.startsWith('https://') &&
@@ -102,14 +78,9 @@ class AppConfig {
   static bool get isGroqConfigured =>
       isGroqDirectConfigured || isGroqProxyConfigured;
 
-  static bool get isVoiceProxyConfigured =>
-      voiceTtsEndpoint.startsWith('https://');
+  static bool get isDeepgramConfigured => _hasRealValue(deepgramApiKey);
 
-  static bool get isCartesiaConfigured =>
-      _hasRealValue(cartesiaApiKey) && cartesiaVoiceId.isNotEmpty;
-
-  static bool get isHumanVoiceConfigured =>
-      isVoiceProxyConfigured || isCartesiaConfigured;
+  static bool get isHumanVoiceConfigured => isDeepgramConfigured;
 
   static String _configuredValue(String key, String dartDefineValue) {
     final envValue = dotenv.isInitialized ? dotenv.maybeGet(key)?.trim() : null;

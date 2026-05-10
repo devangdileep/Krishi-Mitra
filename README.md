@@ -22,7 +22,7 @@
 *   🗺️ **Precision Farmland Mapping**: Replaced standard maps with hardware-accelerated **MapLibre GL**. Includes a unique "Walk-the-Boundary" GPS streaming feature with jitter-filtering to map farm borders on foot.
 *   🧠 **Crop Intelligence Engine**: Query any crop to instantly receive AI-generated insights regarding suitable regions, harvesting timelines, and estimated ROI/Market Prices.
 *   🚜 **Personalized Suitability AI**: The AI dynamically analyzes your mapped farmlands (soil pH, terrain type, irrigation method) to recommend the best crops for your exact geography.
-*   🎙️ **Conversational Voice Assistant**: Multi-lingual voice support (English, Hindi, Malayalam, Tamil) utilizing `speech_to_text` and real-time TTS via Cartesia/ElevenLabs.
+*   🎙️ **Conversational Voice Assistant**: Multi-lingual voice support (English, Hindi, Malayalam, Tamil) utilizing `speech_to_text` and low-latency Deepgram Aura TTS.
 *   🌤️ **Hyper-Local Weather**: Integrated with Open-Meteo to provide 7-day weather forecasts that directly influence the AI's smart action window recommendations (e.g., delaying irrigation if rain is expected).
 *   💎 **Premium Glassmorphism UI**: Beautifully designed responsive interface featuring dynamic blur effects, sleek micro-animations, and a unified design system.
 
@@ -33,7 +33,7 @@
 *   **AI Engine**: Groq API (Running `llama-3.3-70b-versatile` & `llama-3.1-8b-instant`)
 *   **Geospatial / Maps**: MapLibre GL, Geolocator
 *   **Weather API**: Open-Meteo (Free, No Auth Required)
-*   **TTS Integration**: Cartesia / ElevenLabs
+*   **TTS Integration**: Deepgram Aura
 *   **State Management**: InheritedNotifier (Native Flutter) & `app_state.dart`
 
 ---
@@ -56,10 +56,8 @@ GROQ_API_KEY=YOUR_GROQ_API_KEY
 GROQ_PROXY_ENDPOINT= # Optional: Edge Function URL for production
 
 # Text-to-Speech (Optional)
-CARTESIA_API_KEY=YOUR_CARTESIA_API_KEY
-CARTESIA_VOICE_ID=1259b7e3-cb8a-43df-9446-30971a46b8b0
-CARTESIA_MODEL_ID=sonic-3
-CARTESIA_VERSION=2026-03-01
+DEEPGRAM_API_KEY=YOUR_DEEPGRAM_API_KEY
+DEEPGRAM_TTS_MODEL=aura-2-thalia-en
 
 # Real-Time Agricultural Data (Optional)
 DATA_GOV_API_KEY=YOUR_DATA_GOV_KEY
