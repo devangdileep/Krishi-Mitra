@@ -38,7 +38,27 @@ class AppConfig {
 
   static const _deepgramTtsModelDefine = String.fromEnvironment(
     'DEEPGRAM_TTS_MODEL',
-    defaultValue: 'aura-2-thalia-en',
+    defaultValue: 'aura-2-arcas-en',
+  );
+
+  static const _sarvamApiKeyDefine = String.fromEnvironment(
+    'SARVAM_API_KEY',
+    defaultValue: 'PASTE_SARVAM_API_KEY',
+  );
+
+  static const _sarvamTtsModelDefine = String.fromEnvironment(
+    'SARVAM_TTS_MODEL',
+    defaultValue: 'bulbul:v3',
+  );
+
+  static const _sarvamTtsSpeakerDefine = String.fromEnvironment(
+    'SARVAM_TTS_SPEAKER',
+    defaultValue: '',
+  );
+
+  static const _sarvamTtsSampleRateDefine = String.fromEnvironment(
+    'SARVAM_TTS_SAMPLE_RATE',
+    defaultValue: '24000',
   );
 
   static String get supabaseUrl =>
@@ -65,6 +85,22 @@ class AppConfig {
   static String get deepgramTtsModel =>
       _configuredValue('DEEPGRAM_TTS_MODEL', _deepgramTtsModelDefine);
 
+  static String get sarvamApiKey =>
+      _configuredValue('SARVAM_API_KEY', _sarvamApiKeyDefine);
+
+  static String get sarvamTtsModel =>
+      _configuredValue('SARVAM_TTS_MODEL', _sarvamTtsModelDefine);
+
+  static String get sarvamTtsSpeaker =>
+      _configuredValue('SARVAM_TTS_SPEAKER', _sarvamTtsSpeakerDefine);
+
+  static int get sarvamTtsSampleRate {
+    final parsed = int.tryParse(
+      _configuredValue('SARVAM_TTS_SAMPLE_RATE', _sarvamTtsSampleRateDefine),
+    );
+    return parsed == null || parsed <= 0 ? 24000 : parsed;
+  }
+
   static bool get isSupabaseConfigured =>
       supabaseUrl.startsWith('https://') &&
       supabaseApiKey.isNotEmpty &&
@@ -80,7 +116,10 @@ class AppConfig {
 
   static bool get isDeepgramConfigured => _hasRealValue(deepgramApiKey);
 
-  static bool get isHumanVoiceConfigured => isDeepgramConfigured;
+  static bool get isSarvamConfigured => _hasRealValue(sarvamApiKey);
+
+  static bool get isHumanVoiceConfigured =>
+      isSarvamConfigured || isDeepgramConfigured;
 
   static String _configuredValue(String key, String dartDefineValue) {
     final envValue = dotenv.isInitialized ? dotenv.maybeGet(key)?.trim() : null;

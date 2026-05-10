@@ -24,7 +24,7 @@ The existing screens and services will be split gradually into:
 
 - UI does not own API details.
 - Repositories own data access and offline-first behavior.
-- Services own external systems such as Groq, Deepgram, weather, and Supabase REST.
+- Services own external systems such as Groq, Sarvam, Deepgram, weather, and Supabase REST.
 - App layer owns routing, dependency injection, bootstrap, and global theme state.
 - Heavy UI files should be split into feature widgets over time.
 

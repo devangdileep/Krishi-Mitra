@@ -22,7 +22,7 @@
 *   🗺️ **Precision Farmland Mapping**: Replaced standard maps with hardware-accelerated **MapLibre GL**. Includes a unique "Walk-the-Boundary" GPS streaming feature with jitter-filtering to map farm borders on foot.
 *   🧠 **Crop Intelligence Engine**: Query any crop to instantly receive AI-generated insights regarding suitable regions, harvesting timelines, and estimated ROI/Market Prices.
 *   🚜 **Personalized Suitability AI**: The AI dynamically analyzes your mapped farmlands (soil pH, terrain type, irrigation method) to recommend the best crops for your exact geography.
-*   🎙️ **Conversational Voice Assistant**: Multi-lingual voice support (English, Hindi, Malayalam, Tamil) utilizing `speech_to_text` and low-latency Deepgram Aura TTS.
+*   🎙️ **Conversational Voice Assistant**: Multi-lingual voice support (English, Hindi, Malayalam, Tamil) utilizing `speech_to_text`, Deepgram for English, Sarvam Bulbul v3 studio voices for Indian regional languages, and native Android fallback voices.
 *   🌤️ **Hyper-Local Weather**: Integrated with Open-Meteo to provide 7-day weather forecasts that directly influence the AI's smart action window recommendations (e.g., delaying irrigation if rain is expected).
 *   💎 **Premium Glassmorphism UI**: Beautifully designed responsive interface featuring dynamic blur effects, sleek micro-animations, and a unified design system.
 
@@ -33,7 +33,7 @@
 *   **AI Engine**: Groq API (Running `llama-3.3-70b-versatile` & `llama-3.1-8b-instant`)
 *   **Geospatial / Maps**: MapLibre GL, Geolocator
 *   **Weather API**: Open-Meteo (Free, No Auth Required)
-*   **TTS Integration**: Deepgram Aura
+*   **TTS Integration**: Sarvam Bulbul v3 + Native Android Indian voices + Deepgram Aura
 *   **State Management**: InheritedNotifier (Native Flutter) & `app_state.dart`
 
 ---
@@ -57,7 +57,12 @@ GROQ_PROXY_ENDPOINT= # Optional: Edge Function URL for production
 
 # Text-to-Speech (Optional)
 DEEPGRAM_API_KEY=YOUR_DEEPGRAM_API_KEY
-DEEPGRAM_TTS_MODEL=aura-2-thalia-en
+DEEPGRAM_TTS_MODEL=aura-2-arcas-en
+
+SARVAM_API_KEY=YOUR_SARVAM_API_KEY
+SARVAM_TTS_MODEL=bulbul:v3
+SARVAM_TTS_SPEAKER= # Optional: leave empty for per-language defaults
+SARVAM_TTS_SAMPLE_RATE=24000
 
 # Real-Time Agricultural Data (Optional)
 DATA_GOV_API_KEY=YOUR_DATA_GOV_KEY

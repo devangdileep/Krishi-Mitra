@@ -20,12 +20,16 @@ if (incomingDartDefines == null || incomingDartDefines.trim().isEmpty()) {
         def releaseRequested = gradle.startParameter.taskNames.any {
             it.toLowerCase().contains("release")
         }
-        def directSecretNames = ["GROQ_API_KEY", "DEEPGRAM_API_KEY"] as Set
+        def directSecretNames = ["GROQ_API_KEY", "DEEPGRAM_API_KEY", "SARVAM_API_KEY"] as Set
         def defineNames = [
             "SUPABASE_URL",
             "SUPABASE_API_KEY",
             "GROQ_API_KEY",
             "GROQ_PROXY_ENDPOINT",
+            "SARVAM_API_KEY",
+            "SARVAM_TTS_MODEL",
+            "SARVAM_TTS_SPEAKER",
+            "SARVAM_TTS_SAMPLE_RATE",
             "DEEPGRAM_API_KEY",
             "DEEPGRAM_TTS_MODEL",
             "MAPTILER_KEY",

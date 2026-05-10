@@ -90,6 +90,24 @@ class SupportedLanguages {
       all.firstWhere((item) => item.code == code, orElse: () => all.first);
 }
 
+class VoiceAdviceContext {
+  const VoiceAdviceContext({
+    required this.farms,
+    this.userLocationName,
+    this.latitude,
+    this.longitude,
+    this.weather,
+    this.mandiRecords = const [],
+  });
+
+  final List<Farmland> farms;
+  final String? userLocationName;
+  final double? latitude;
+  final double? longitude;
+  final WeatherForecast? weather;
+  final List<MandiPriceRecord> mandiRecords;
+}
+
 class DecisionEngine {
   DecisionEngine({http.Client? client})
       : _groq = _GroqChatGateway(client ?? http.Client());
@@ -101,16 +119,26 @@ class DecisionEngine {
     'mixtral-8x7b-32768',
   ];
 
-  Future<String> advice(String prompt, String languageCode) async {
+  Future<String> advice(
+    String question,
+    String languageCode, {
+    VoiceAdviceContext? context,
+  }) async {
     if (!AppConfig.isGroqConfigured) {
       return 'Groq is not configured. Add GROQ_API_KEY in .env or pass it with --dart-define.';
     }
 
     final languageName = SupportedLanguages.byCode(languageCode).englishName;
+    final contextPrompt = _voiceContextPrompt(context);
     final systemPrompt = '''
-You are Smart Krishi Mitra, a localized agricultural AI assistant for farmers in India.
-Reply only in $languageName. Use natural spoken wording, short sentences, farmer-friendly language, and no markdown.
-If the selected language is regional, use that native script only.
+You are Dr. Krishi Mitra, a senior Indian agronomist, soil scientist, crop protection advisor, and mandi-aware farm planning assistant.
+Reply only in $languageName. If the selected language is regional, use that native script only.
+
+Think before answering. Use the provided farm, weather, crop, and mandi context. If a fact is not provided, say it is uncertain instead of inventing it.
+Give scientific but farmer-friendly reasoning: crop physiology, soil pH, water stress, pest or disease cycle, nutrient logic, weather timing, and economics when relevant.
+For pesticides, fertilizers, or medicines, stay safe: do not give exact high-risk dosage unless locally verified; recommend soil test, label directions, and extension officer confirmation.
+For voice output, use natural spoken wording with no markdown. Keep the answer practical and clear: quick answer, why, what to do today, and what to monitor.
+Prefer 120-180 words. Use Celsius, millimetres, hectares, and INR per quintal.
 ''';
 
     try {
@@ -118,17 +146,97 @@ If the selected language is regional, use that native script only.
         models: _models,
         messages: [
           {'role': 'system', 'content': systemPrompt},
-          {'role': 'user', 'content': prompt},
+          {
+            'role': 'user',
+            'content': '''
+FARMER QUESTION
+$question
+
+AVAILABLE CONTEXT
+$contextPrompt
+
+Answer as if speaking directly to the farmer. Analyze the question first, then give the best practical recommendation.
+''',
+          },
         ],
-        temperature: 0.7,
-        maxTokens: 800,
+        temperature: 0.35,
+        maxTokens: 1200,
       );
     } catch (error) {
       return 'I could not reach the AI model right now. Last error: $error';
     }
   }
-}
 
+  String _voiceContextPrompt(VoiceAdviceContext? context) {
+    if (context == null) {
+      return 'No farm profile, weather, or mandi context was provided.';
+    }
+
+    final coordinates = context.latitude == null || context.longitude == null
+        ? 'Coordinates unavailable'
+        : '${context.latitude!.toStringAsFixed(4)}, ${context.longitude!.toStringAsFixed(4)}';
+    final farmLines = context.farms.isEmpty
+        ? 'No saved farms.'
+        : context.farms.map((farm) {
+            final area = estimateAreaHectares(farm.boundaryPoints);
+            final crops = farm.crops.isEmpty
+                ? 'no current crops'
+                : farm.crops
+                    .map((crop) =>
+                        '${crop.name}${crop.coveragePercent > 0 ? " ${crop.coveragePercent.toStringAsFixed(0)}%" : ""}${crop.growthStage != null ? " at ${enumLabel(crop.growthStage)} stage" : ""}')
+                    .join(', ');
+            return [
+              'Farm: ${farm.name}',
+              'Area: ${area > 0 ? "${area.toStringAsFixed(2)} ha" : "unmapped"}',
+              'GPS: ${farm.locationLat.toStringAsFixed(4)}, ${farm.locationLng.toStringAsFixed(4)}',
+              'Soil: ${farm.soilType ?? "unknown"}',
+              if (farm.soilPH != null) 'pH: ${farm.soilPH!.toStringAsFixed(1)}',
+              if (farm.irrigationType != null)
+                'Irrigation: ${enumLabel(farm.irrigationType)}',
+              if (farm.waterSource != null)
+                'Water source: ${enumLabel(farm.waterSource)}',
+              if (farm.terrainType != null)
+                'Terrain: ${enumLabel(farm.terrainType)}',
+              if (farm.previousCrop != null)
+                'Previous crop: ${farm.previousCrop}',
+              if (farm.nearestMarket != null)
+                'Nearest market: ${farm.nearestMarket}',
+              'Crops: $crops',
+            ].join('; ');
+          }).join('\n');
+
+    final mandiLines = context.mandiRecords.isEmpty
+        ? 'No live mandi rows available for this question.'
+        : context.mandiRecords.take(8).map((record) {
+            return '${record.commodity} at ${record.market}, ${record.district}: modal INR ${record.modalPrice.toStringAsFixed(0)}/qtl, range INR ${record.minPrice.toStringAsFixed(0)}-${record.maxPrice.toStringAsFixed(0)}/qtl, ${record.arrivalDate}.';
+          }).join('\n');
+
+    return '''
+User location: ${context.userLocationName ?? 'not set'}
+User GPS: $coordinates
+Weather: ${_weatherSummary(context.weather)}
+Saved farms:
+$farmLines
+Latest mandi context:
+$mandiLines
+''';
+  }
+
+  String _weatherSummary(WeatherForecast? weather) {
+    if (weather == null) return 'Weather forecast unavailable.';
+    final max = weather.daily.maxTemp;
+    final min = weather.daily.minTemp;
+    final rain = weather.daily.precipitation ?? const <double>[];
+    final avgHigh = _average(max);
+    final avgLow = _average(min);
+    return 'Average high: ${avgHigh?.toStringAsFixed(0) ?? "unknown"} C, low: ${avgLow?.toStringAsFixed(0) ?? "unknown"} C. Rain this week: ${rain.fold<double>(0, (sum, value) => sum + value).toStringAsFixed(0)} mm.';
+  }
+
+  double? _average(List<double>? values) {
+    if (values == null || values.isEmpty) return null;
+    return values.reduce((a, b) => a + b) / values.length;
+  }
+}
 
 class CropIntelligenceReport {
   const CropIntelligenceReport({
@@ -153,9 +261,12 @@ class CropIntelligenceReport {
     });
     return CropIntelligenceReport(
       suitableArea: json['suitableArea']?.toString() ?? 'Details unavailable',
-      harvestingInfo: json['harvestingInfo']?.toString() ?? 'Details unavailable',
-      marketPriceEstimate: json['marketPriceEstimate']?.toString() ?? 'Price estimate unavailable',
-      roiEstimate: json['roiEstimate']?.toString() ?? 'ROI estimate unavailable',
+      harvestingInfo:
+          json['harvestingInfo']?.toString() ?? 'Details unavailable',
+      marketPriceEstimate: json['marketPriceEstimate']?.toString() ??
+          'Price estimate unavailable',
+      roiEstimate:
+          json['roiEstimate']?.toString() ?? 'ROI estimate unavailable',
       farmlandEvaluations: evals,
     );
   }
@@ -225,8 +336,8 @@ class FarmlandIntelligence {
             as Map<String, dynamic>;
         final rawFollowUpDays = (json['followUpDays'] as num?)?.toInt() ?? 3;
         final followUpDays = rawFollowUpDays.clamp(1, 7).toInt();
-        final confidence = (json['confidence'] as num?)?.toDouble() ??
-            local.confidence;
+        final confidence =
+            (json['confidence'] as num?)?.toDouble() ?? local.confidence;
         return local.copyWith(
           issueType: json['issueType']?.toString() ?? local.issueType,
           severity: json['severity']?.toString() ?? local.severity,
@@ -251,7 +362,6 @@ class FarmlandIntelligence {
     return local;
   }
 
-  
   Future<CropIntelligenceReport?> analyzeCrop(
     String cropName,
     List<Farmland> userFarms,
@@ -259,27 +369,25 @@ class FarmlandIntelligence {
     WeatherForecast? weather,
     double? latitude,
     double? longitude,
-  }
-  ) async {
+  }) async {
     if (!AppConfig.isGroqConfigured) return null;
 
-    final farmsInfo = userFarms.map((f) => 
-      [
-        'ID: ${f.id}',
-        'Name: ${f.name}',
-        'Area: ${estimateAreaHectares(f.boundaryPoints).toStringAsFixed(2)} ha',
-        'Soil: ${f.soilType}',
-        'pH: ${f.soilPH}',
-        'Terrain: ${f.terrainType}',
-        'Irrigation: ${f.irrigationType}',
-        'Water source: ${f.waterSource}',
-        'Previous crop: ${f.previousCrop}',
-        'Nearest market: ${f.nearestMarket}',
-      ].join(', ')
-    ).join('\n');
-    final weatherInfo = weather == null
-        ? 'Weather unavailable'
-        : _weatherSummary(weather);
+    final farmsInfo = userFarms
+        .map((f) => [
+              'ID: ${f.id}',
+              'Name: ${f.name}',
+              'Area: ${estimateAreaHectares(f.boundaryPoints).toStringAsFixed(2)} ha',
+              'Soil: ${f.soilType}',
+              'pH: ${f.soilPH}',
+              'Terrain: ${f.terrainType}',
+              'Irrigation: ${f.irrigationType}',
+              'Water source: ${f.waterSource}',
+              'Previous crop: ${f.previousCrop}',
+              'Nearest market: ${f.nearestMarket}',
+            ].join(', '))
+        .join('\n');
+    final weatherInfo =
+        weather == null ? 'Weather unavailable' : _weatherSummary(weather);
     final coordinates = latitude == null || longitude == null
         ? 'Coordinates unavailable'
         : '${latitude.toStringAsFixed(4)}, ${longitude.toStringAsFixed(4)}';
@@ -499,7 +607,7 @@ Return strict raw JSON with keys:
 ''';
   }
 
-Future<ComprehensiveReport> analyze(
+  Future<ComprehensiveReport> analyze(
     Farmland farm,
     WeatherForecast? weather,
   ) async {
@@ -522,8 +630,8 @@ Future<ComprehensiveReport> analyze(
     final prompt = _buildPrompt(farm, weatherSummary);
     for (final model in _models) {
       try {
-        final report =
-            _withFallbackCropAnalysis(await _callGroq(model, prompt), farm, weather);
+        final report = _withFallbackCropAnalysis(
+            await _callGroq(model, prompt), farm, weather);
         await _store.cacheAiReport(cacheKey, report);
         return report;
       } catch (_) {
@@ -612,22 +720,26 @@ Future<ComprehensiveReport> analyze(
     final cropLines = farm.crops.isEmpty
         ? '- No current crop coverage added.'
         : farm.crops.map((crop) {
-      final parts = <String>[crop.name];
-      if (crop.variety != null) parts.add('(${crop.variety} variety)');
-      if (crop.coveragePercent > 0) {
-        parts.add('${crop.coveragePercent.toStringAsFixed(0)}% coverage');
-        if (area > 0) {
-          parts.add('(~${(area * crop.coveragePercent / 100).toStringAsFixed(2)} ha)');
-        }
-      }
-      if (crop.growthStage != null) parts.add('${enumLabel(crop.growthStage)} stage');
-      if (crop.sowingDate != null) parts.add('sown ${crop.sowingDate}');
-      return '- ${parts.join(", ")}';
-    }).join('\n');
+            final parts = <String>[crop.name];
+            if (crop.variety != null) parts.add('(${crop.variety} variety)');
+            if (crop.coveragePercent > 0) {
+              parts.add('${crop.coveragePercent.toStringAsFixed(0)}% coverage');
+              if (area > 0) {
+                parts.add(
+                    '(~${(area * crop.coveragePercent / 100).toStringAsFixed(2)} ha)');
+              }
+            }
+            if (crop.growthStage != null) {
+              parts.add('${enumLabel(crop.growthStage)} stage');
+            }
+            if (crop.sowingDate != null) parts.add('sown ${crop.sowingDate}');
+            return '- ${parts.join(', ')}';
+          }).join('\n');
 
     final locationBlock = [
       'GPS: ${farm.locationLat.toStringAsFixed(4)}, ${farm.locationLng.toStringAsFixed(4)}',
-      if (farm.elevation != null) 'Elevation: ${farm.elevation!.toStringAsFixed(0)}m',
+      if (farm.elevation != null)
+        'Elevation: ${farm.elevation!.toStringAsFixed(0)}m',
       if (farm.terrainType != null) 'Terrain: ${enumLabel(farm.terrainType)}',
       'Area: ${area > 0 ? "${area.toStringAsFixed(2)} ha" : "unmapped"}',
       'Geofence: ${farm.boundaryPoints.length} corners',
@@ -636,15 +748,18 @@ Future<ComprehensiveReport> analyze(
     final soilBlock = [
       'Soil type: ${farm.soilType ?? "Unknown"}',
       if (farm.soilPH != null) 'pH: ${farm.soilPH!.toStringAsFixed(1)}',
-      if (farm.irrigationType != null) 'Irrigation: ${enumLabel(farm.irrigationType)}',
-      if (farm.waterSource != null) 'Water source: ${enumLabel(farm.waterSource)}',
+      if (farm.irrigationType != null)
+        'Irrigation: ${enumLabel(farm.irrigationType)}',
+      if (farm.waterSource != null)
+        'Water source: ${enumLabel(farm.waterSource)}',
       if (farm.farmingPractice != null)
         'Practice: ${enumLabel(farm.farmingPractice)}${farm.farmAge != null ? " (${farm.farmAge} years)" : ""}',
       if (farm.previousCrop != null) 'Previous crop: ${farm.previousCrop}',
     ].join(' | ');
 
     final logisticsBlock = [
-      if (farm.landOwnership != null) 'Ownership: ${enumLabel(farm.landOwnership)}',
+      if (farm.landOwnership != null)
+        'Ownership: ${enumLabel(farm.landOwnership)}',
       if (farm.nearestMarket != null) 'Nearest market: ${farm.nearestMarket}',
     ].join(' | ');
 

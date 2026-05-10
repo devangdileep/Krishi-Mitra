@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math' hide Point;
 import 'dart:math' as math;
@@ -751,6 +752,8 @@ class _HomeShellState extends State<HomeShell> {
             backgroundColor: Colors.transparent,
             builder: (_) => VoiceAssistantSheet(
               repository: widget.repository,
+              weather: widget.weather,
+              mandi: widget.mandi,
               decisionEngine: widget.decisionEngine,
               voiceService: widget.voiceService,
               userId: user.id,
@@ -6070,9 +6073,13 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   String _voiceLabel() {
+    final languageCode = AppStateScope.of(context).selectedLanguage;
     if (_speaking) return 'Speaking...';
-    if (widget.voiceService.cloudVoiceReady) {
-      return 'Read in Indian neural voice';
+    if (widget.voiceService.usesCloudVoiceFor(languageCode)) {
+      return 'Read in studio Indian voice';
+    }
+    if (widget.voiceService.usesNativeIndianVoiceFor(languageCode)) {
+      return 'Read in local Indian voice';
     }
     return 'Read aloud offline';
   }
@@ -8286,12 +8293,16 @@ class VoiceAssistantSheet extends StatefulWidget {
   const VoiceAssistantSheet({
     super.key,
     required this.repository,
+    required this.weather,
+    required this.mandi,
     required this.decisionEngine,
     required this.voiceService,
     required this.userId,
   });
 
   final FarmlandRepository repository;
+  final WeatherClient weather;
+  final DataGovMandiClient mandi;
   final DecisionEngine decisionEngine;
   final HumanVoiceService voiceService;
   final int userId;
@@ -8405,15 +8416,13 @@ class _VoiceAssistantSheetState extends State<VoiceAssistantSheet> {
               .catchError((_) {}),
         );
         final farms = widget.repository.cached(widget.userId);
-        final farmContext = farms
-            .map((farm) =>
-                '${farm.name}: ${farm.crops.map((e) => e.name).join(", ")}; soil ${farm.soilType}; boundary ${farm.boundaryPoints.length} points')
-            .join('\n');
         late final String answer;
         try {
+          final context = await _buildVoiceAdviceContext(words, state, farms);
           answer = await widget.decisionEngine.advice(
-            'Farmer said: "$words". Saved farms:\n$farmContext',
+            words,
             state.selectedLanguage,
+            context: context,
           );
         } catch (error) {
           if (!mounted) return;
@@ -8467,6 +8476,104 @@ class _VoiceAssistantSheetState extends State<VoiceAssistantSheet> {
     );
   }
 
+  Future<VoiceAdviceContext> _buildVoiceAdviceContext(
+    String question,
+    AppState state,
+    List<Farmland> farms,
+  ) async {
+    var latitude = state.userLat;
+    var longitude = state.userLng;
+    if ((latitude == null || longitude == null) && farms.isNotEmpty) {
+      latitude = farms.first.locationLat;
+      longitude = farms.first.locationLng;
+    }
+
+    WeatherForecast? weather;
+    if (latitude != null && longitude != null) {
+      try {
+        weather = await widget.weather
+            .daily(latitude, longitude)
+            .timeout(const Duration(seconds: 6));
+      } catch (_) {
+        weather = null;
+      }
+    }
+
+    final mandiRecords = <MandiPriceRecord>[];
+    final stateName = _stateFromLocationName(state.userLocationName);
+    for (final crop in _voiceCropCandidates(question, farms).take(3)) {
+      try {
+        final rows = await widget.mandi
+            .prices(
+              commodity: _mandiCommodityForCrop(crop),
+              state: stateName,
+              limit: 6,
+            )
+            .timeout(const Duration(seconds: 5));
+        mandiRecords.addAll(rows);
+      } catch (_) {
+        // Mandi context is helpful, but the voice answer should still work.
+      }
+    }
+
+    return VoiceAdviceContext(
+      farms: farms,
+      userLocationName: state.userLocationName,
+      latitude: latitude,
+      longitude: longitude,
+      weather: weather,
+      mandiRecords: mandiRecords,
+    );
+  }
+
+  List<String> _voiceCropCandidates(String question, List<Farmland> farms) {
+    final lower = question.toLowerCase();
+    final crops = <String>[];
+    for (final facts in _cropKnowledgeBase) {
+      final names = [facts.name, ...facts.aliases];
+      if (names.any((name) => lower.contains(name.toLowerCase()))) {
+        crops.add(facts.name);
+      }
+    }
+    for (final farm in farms) {
+      for (final crop in farm.crops) {
+        final clean = crop.name.trim();
+        if (clean.isEmpty) continue;
+        if (lower.contains(clean.toLowerCase()) || crops.isEmpty) {
+          crops.add(clean);
+        }
+      }
+    }
+    return LinkedHashSet<String>.from(crops).toList();
+  }
+
+  String? _stateFromLocationName(String? locationName) {
+    if (locationName == null) return null;
+    final lower = locationName.toLowerCase();
+    const states = [
+      'Andhra Pradesh',
+      'Assam',
+      'Bihar',
+      'Gujarat',
+      'Haryana',
+      'Karnataka',
+      'Kerala',
+      'Madhya Pradesh',
+      'Maharashtra',
+      'Odisha',
+      'Punjab',
+      'Rajasthan',
+      'Tamil Nadu',
+      'Telangana',
+      'Uttar Pradesh',
+      'West Bengal',
+    ];
+    for (final state in states) {
+      if (lower.contains(state.toLowerCase())) return state;
+    }
+    return null;
+  }
+
   String _friendlySpeechError(String errorMsg) {
     final normalized = errorMsg.toLowerCase();
     if (normalized.contains('permission') || normalized.contains('denied')) {
@@ -8491,6 +8598,11 @@ class _VoiceAssistantSheetState extends State<VoiceAssistantSheet> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final performance = UiPerformance.of(context);
+    final state = AppStateScope.of(context);
+    final usesCloudVoice =
+        widget.voiceService.usesCloudVoiceFor(state.selectedLanguage);
+    final usesNativeIndianVoice =
+        widget.voiceService.usesNativeIndianVoiceFor(state.selectedLanguage);
     final screenHeight = MediaQuery.of(context).size.height;
     return GlassBackground(
       child: SafeArea(
@@ -8542,12 +8654,15 @@ class _VoiceAssistantSheetState extends State<VoiceAssistantSheet> {
                           const SizedBox(height: 8),
                           Chip(
                             avatar: Icon(
-                              widget.voiceService.cloudVoiceReady
+                              usesCloudVoice
                                   ? Icons.graphic_eq_rounded
-                                  : Icons.phone_android_rounded,
+                                  : usesNativeIndianVoice
+                                      ? Icons.translate_rounded
+                                      : Icons.phone_android_rounded,
                               size: 18,
                             ),
-                            label: Text(widget.voiceService.voiceStatusLabel),
+                            label: Text(widget.voiceService
+                                .voiceStatusLabelFor(state.selectedLanguage)),
                           ),
                         ],
                       ),
@@ -8576,9 +8691,11 @@ class _VoiceAssistantSheetState extends State<VoiceAssistantSheet> {
                     if (_speaking) ...[
                       const SizedBox(height: 12),
                       Text(
-                        widget.voiceService.cloudVoiceReady
-                            ? 'Speaking with Indian-tuned neural voice'
-                            : 'Speaking with best available Indian device voice',
+                        usesCloudVoice
+                            ? 'Speaking with studio Indian voice'
+                            : usesNativeIndianVoice
+                                ? 'Speaking in local Indian device voice'
+                                : 'Speaking with device voice',
                         style: TextStyle(color: colors.primary),
                       ),
                     ],

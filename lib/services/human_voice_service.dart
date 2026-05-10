@@ -10,7 +10,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../config/app_config.dart';
 
-enum VoiceProvider { deepgram, deviceFallback }
+enum VoiceProvider { sarvam, deepgram, deviceFallback }
 
 class VoicePlaybackResult {
   const VoicePlaybackResult({
@@ -41,9 +41,33 @@ class HumanVoiceService {
 
   bool get isPlaying => _speakGeneration > 0;
   bool get cloudVoiceReady => AppConfig.isHumanVoiceConfigured;
+
+  bool usesCloudVoiceFor(String languageCode) =>
+      _usesSarvamVoiceFor(languageCode) || _usesDeepgramVoiceFor(languageCode);
+
+  bool usesNativeIndianVoiceFor(String languageCode) =>
+      !_usesSarvamVoiceFor(languageCode) &&
+      _prefersNativeIndianTts(languageCode);
+
   String get voiceStatusLabel {
+    if (AppConfig.isSarvamConfigured) {
+      return 'Sarvam Indian studio voice ready';
+    }
     if (AppConfig.isDeepgramConfigured) {
-      return 'Deepgram Aura voice ready';
+      return 'Deepgram Aura voice available';
+    }
+    return 'Offline device voice';
+  }
+
+  String voiceStatusLabelFor(String languageCode) {
+    if (_usesSarvamVoiceFor(languageCode)) {
+      return 'Sarvam ${_spokenLanguageName(languageCode)} studio voice';
+    }
+    if (_usesDeepgramVoiceFor(languageCode)) {
+      return 'Deepgram Aura voice';
+    }
+    if (_prefersNativeIndianTts(languageCode)) {
+      return 'Native ${_spokenLanguageName(languageCode)} voice';
     }
     return 'Offline device voice';
   }
@@ -68,10 +92,35 @@ class HumanVoiceService {
     // cancellation between chunks.
     final generation = _speakGeneration;
 
-    if (AppConfig.isDeepgramConfigured) {
+    if (_usesSarvamVoiceFor(languageCode)) {
       try {
         await _speakCloud(
-            prepared, languageCode, _audioFromDeepgram, generation);
+          prepared,
+          languageCode,
+          _audioFromSarvam,
+          generation,
+          maxChars: 420,
+        );
+        return const VoicePlaybackResult(provider: VoiceProvider.sarvam);
+      } catch (error) {
+        if (_speakGeneration != generation) {
+          return const VoicePlaybackResult(
+            provider: VoiceProvider.deviceFallback,
+            message: 'Playback cancelled.',
+          );
+        }
+        return _fallback(prepared, languageCode, error, generation);
+      }
+    }
+
+    if (_usesDeepgramVoiceFor(languageCode)) {
+      try {
+        await _speakCloud(
+          prepared,
+          languageCode,
+          _audioFromDeepgram,
+          generation,
+        );
         return const VoicePlaybackResult(provider: VoiceProvider.deepgram);
       } catch (error) {
         if (_speakGeneration != generation) {
@@ -99,10 +148,36 @@ class HumanVoiceService {
     final prepared = _prepareForSpeech(text);
     if (prepared.isEmpty) return;
     await stop();
+    final generation = _speakGeneration;
     try {
+      if (_usesSarvamVoiceFor(languageCode)) {
+        await _speakCloud(
+          prepared,
+          languageCode,
+          _audioFromSarvam,
+          generation,
+          maxChars: 180,
+        );
+        return;
+      }
+      if (_usesDeepgramVoiceFor(languageCode)) {
+        await _speakCloud(
+          prepared,
+          languageCode,
+          _audioFromDeepgram,
+          generation,
+          maxChars: 180,
+        );
+        return;
+      }
       await _speakDevice(prepared, languageCode);
     } catch (_) {
-      // A cue is only a latency helper; the main answer still updates on screen.
+      if (_speakGeneration != generation) return;
+      try {
+        await _speakDevice(prepared, languageCode);
+      } catch (_) {
+        // A cue is only a latency helper; the main answer still updates on screen.
+      }
     }
   }
 
@@ -137,14 +212,22 @@ class HumanVoiceService {
     String text,
     String languageCode,
     Future<File> Function(String chunk, String languageCode) resolveAudio,
-    int generation,
-  ) async {
+    int generation, {
+    int maxChars = 260,
+  }) async {
     await _player.setReleaseMode(ReleaseMode.stop);
-    for (final chunk in _speechChunks(text, maxChars: 320)) {
-      // Bail out if a newer stop() or speak() happened while we were fetching.
+    final chunks = _speechChunks(text, maxChars: maxChars);
+    Future<File>? nextAudio =
+        chunks.isEmpty ? null : resolveAudio(chunks.first, languageCode);
+    for (var index = 0; index < chunks.length; index++) {
       if (_speakGeneration != generation) return;
-      final file = await resolveAudio(chunk, languageCode);
+      final pendingAudio = nextAudio;
+      if (pendingAudio == null) return;
+      final file = await pendingAudio;
       if (_speakGeneration != generation) return;
+      nextAudio = index + 1 < chunks.length
+          ? resolveAudio(chunks[index + 1], languageCode)
+          : null;
       final completed = _player.onPlayerComplete.first.timeout(
         const Duration(seconds: 45),
         onTimeout: () {
@@ -155,6 +238,27 @@ class HumanVoiceService {
       await completed;
       if (_speakGeneration != generation) return;
     }
+  }
+
+  Future<File> _audioFromSarvam(String text, String languageCode) async {
+    final model = AppConfig.sarvamTtsModel;
+    final targetLanguage = _sarvamLanguageCode(languageCode);
+    final speaker = _sarvamSpeakerFor(targetLanguage);
+    final sampleRate = AppConfig.sarvamTtsSampleRate;
+    return _cachedAudioFile(
+      namespace: 'sarvam',
+      text: text,
+      languageCode: targetLanguage,
+      modelId: '$model|$speaker|$sampleRate',
+      extension: 'mp3',
+      fetch: () => _postSarvamAudio(
+        text: text,
+        targetLanguageCode: targetLanguage,
+        model: model,
+        speaker: speaker,
+        sampleRate: sampleRate,
+      ),
+    );
   }
 
   Future<File> _audioFromDeepgram(String text, String languageCode) async {
@@ -179,6 +283,46 @@ class HumanVoiceService {
         },
       ),
     );
+  }
+
+  Future<List<int>> _postSarvamAudio({
+    required String text,
+    required String targetLanguageCode,
+    required String model,
+    required String speaker,
+    required int sampleRate,
+  }) async {
+    final response = await _client
+        .post(
+          Uri.https('api.sarvam.ai', '/text-to-speech'),
+          headers: {
+            'Content-Type': 'application/json',
+            'api-subscription-key': AppConfig.sarvamApiKey,
+          },
+          body: jsonEncode({
+            'text': text,
+            'target_language_code': targetLanguageCode,
+            'model': model,
+            'speaker': speaker,
+            'pace': 1.02,
+            'speech_sample_rate': sampleRate,
+            'output_audio_codec': 'mp3',
+            'temperature': 0.45,
+          }),
+        )
+        .timeout(const Duration(seconds: 18));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+          'Sarvam TTS HTTP ${response.statusCode}: ${response.body}');
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final audios = decoded['audios'];
+    if (audios is! List || audios.isEmpty || audios.first is! String) {
+      throw StateError('Sarvam TTS returned no audio.');
+    }
+    return base64Decode(audios.first as String);
   }
 
   Future<List<int>> _postAudio(
@@ -215,8 +359,7 @@ class HumanVoiceService {
     final cacheKey = sha256
         .convert(
           utf8.encode(
-            '$namespace|$languageCode|${AppConfig.deepgramTtsModel}|'
-            '${modelId ?? AppConfig.deepgramTtsModel}|$text',
+            '$namespace|$languageCode|${modelId ?? ''}|$text',
           ),
         )
         .toString();
@@ -235,7 +378,7 @@ class HumanVoiceService {
     await _fallbackTts.awaitSpeakCompletion(true);
     await _selectBestDeviceVoice(languageCode);
     await _fallbackTts.setSpeechRate(_fallbackRate(languageCode));
-    await _fallbackTts.setPitch(1.04);
+    await _fallbackTts.setPitch(0.96);
     await _fallbackTts.setVolume(1.0);
     for (final chunk in _speechChunks(text, maxChars: 750)) {
       await _fallbackTts.speak(chunk);
@@ -250,6 +393,136 @@ class HumanVoiceService {
 
   String _shortLanguageCode(String languageCode) =>
       languageCode.split('-').first.toLowerCase();
+
+  bool _prefersNativeIndianTts(String languageCode) {
+    final normalized = languageCode.toLowerCase();
+    final baseLanguage = _shortLanguageCode(normalized);
+    const indianLanguages = {
+      'hi',
+      'ml',
+      'ta',
+      'te',
+      'kn',
+      'mr',
+      'bn',
+      'gu',
+      'pa',
+      'or',
+      'ur',
+    };
+    if (baseLanguage == 'en') {
+      return normalized.endsWith('-in') || normalized.contains('_in');
+    }
+    return normalized.endsWith('-in') || indianLanguages.contains(baseLanguage);
+  }
+
+  bool _usesSarvamVoiceFor(String languageCode) =>
+      AppConfig.isSarvamConfigured &&
+      _shortLanguageCode(languageCode) != 'en' &&
+      _sarvamSupportedLanguages.contains(_sarvamLanguageCode(languageCode));
+
+  bool _usesDeepgramVoiceFor(String languageCode) =>
+      AppConfig.isDeepgramConfigured &&
+      _shortLanguageCode(languageCode) == 'en';
+
+  static const _sarvamSupportedLanguages = {
+    'hi-IN',
+    'bn-IN',
+    'ta-IN',
+    'te-IN',
+    'kn-IN',
+    'ml-IN',
+    'mr-IN',
+    'gu-IN',
+    'pa-IN',
+    'od-IN',
+  };
+
+  String _sarvamLanguageCode(String languageCode) {
+    final normalized = languageCode.replaceAll('_', '-');
+    final base = _shortLanguageCode(normalized);
+    switch (base) {
+      case 'en':
+        return normalized.toLowerCase().endsWith('-in') ? 'en-IN' : normalized;
+      case 'hi':
+        return 'hi-IN';
+      case 'bn':
+        return 'bn-IN';
+      case 'ta':
+        return 'ta-IN';
+      case 'te':
+        return 'te-IN';
+      case 'kn':
+        return 'kn-IN';
+      case 'ml':
+        return 'ml-IN';
+      case 'mr':
+        return 'mr-IN';
+      case 'gu':
+        return 'gu-IN';
+      case 'pa':
+        return 'pa-IN';
+      case 'od':
+      case 'or':
+        return 'od-IN';
+      default:
+        return normalized;
+    }
+  }
+
+  String _sarvamSpeakerFor(String targetLanguageCode) {
+    final configured = AppConfig.sarvamTtsSpeaker.trim().toLowerCase();
+    if (configured.isNotEmpty) return configured;
+    switch (targetLanguageCode) {
+      case 'en-IN':
+      case 'ta-IN':
+      case 'mr-IN':
+      case 'gu-IN':
+        return 'ratan';
+      case 'bn-IN':
+        return 'rehan';
+      case 'pa-IN':
+        return 'mani';
+      case 'hi-IN':
+      case 'te-IN':
+      case 'kn-IN':
+      case 'ml-IN':
+      case 'od-IN':
+      default:
+        return 'shubh';
+    }
+  }
+
+  String _spokenLanguageName(String languageCode) {
+    switch (_shortLanguageCode(languageCode)) {
+      case 'en':
+        return 'Indian English';
+      case 'hi':
+        return 'Hindi';
+      case 'ml':
+        return 'Malayalam';
+      case 'ta':
+        return 'Tamil';
+      case 'te':
+        return 'Telugu';
+      case 'kn':
+        return 'Kannada';
+      case 'mr':
+        return 'Marathi';
+      case 'bn':
+        return 'Bengali';
+      case 'gu':
+        return 'Gujarati';
+      case 'pa':
+        return 'Punjabi';
+      case 'or':
+        return 'Odia';
+      case 'ur':
+        return 'Urdu';
+      default:
+        return 'device';
+    }
+  }
 
   String _naturalizeForIndianFarmers(String text, String languageCode) {
     if (!languageCode.startsWith('en')) return text;
@@ -278,7 +551,7 @@ class HumanVoiceService {
       // Same base language (e.g. hi-* when we want hi-in)
       if (locale.startsWith('$baseLanguage-')) score += 35;
 
-      // Indian locale markers — these indicate an Indian-sounding accent.
+      // Indian locale markers indicate an Indian-sounding accent.
       if (locale.endsWith('-in') || locale.contains('_in')) score += 80;
       if (locale.contains('ind') || locale.contains('india')) score += 80;
 
@@ -290,8 +563,17 @@ class HumanVoiceService {
       if (name.contains('malayalam') && baseLanguage == 'ml') score += 60;
       if (name.contains('kannada') && baseLanguage == 'kn') score += 60;
 
-      // Prefer female voices — they tend to sound more natural on mobile TTS.
-      if (name.contains('female') || name.contains('woman')) score += 15;
+      // Prefer a male fallback when Deepgram is unavailable.
+      if (name.contains('male') ||
+          name.contains('man') ||
+          name.contains('masculine')) {
+        score += 28;
+      }
+      if (name.contains('female') ||
+          name.contains('woman') ||
+          name.contains('feminine')) {
+        score -= 20;
+      }
 
       // Prefer higher-quality engine voices.
       if (name.contains('google')) score += 18;
